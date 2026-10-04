@@ -1,31 +1,29 @@
-"""Run all vb_{linear,logit}_example_* scripts."""
-
-import importlib
+## script to run all vb_{linar,logit}_example_* scripts
 import os
-import sys
+import runpy
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import matplotlib.pyplot as plt
 
-from _helpers import parse_args  # noqa: E402
+example_scripts = [
+    'vb_linear_example.py',
+    'vb_linear_example_highdim.py',
+    'vb_linear_example_sparse.py',
+    'vb_linear_example_modelsel.py',
+    'vb_logit_example.py',
+    'vb_logit_example_coeff.py',
+    'vb_logit_example_highdim.py',
+    'vb_logit_example_modelsel.py']
 
-EXAMPLE_SCRIPTS = [
-    'vb_linear_example',
-    'vb_linear_example_highdim',
-    'vb_linear_example_sparse',
-    'vb_linear_example_modelsel',
-    'vb_logit_example',
-    'vb_logit_example_coeff',
-    'vb_logit_example_highdim',
-    'vb_logit_example_modelsel',
-]
+for i in range(len(example_scripts)):
+    script_name = example_scripts[i]
+    print('Running %s' % script_name)
+    ws = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)), script_name))
+    if 'f1' in ws:
+        nf1 = ws['f1'].number
+        if 'f2' in ws:
+            nf2 = ws['f2'].number
+            print('Figures %d and %d\n' % (nf1, nf2))
+        else:
+            print('Figure %d\n' % nf1)
 
-
-def main(save_dir=None, show=True):
-    for name in EXAMPLE_SCRIPTS:
-        print(f'Running {name}')
-        importlib.import_module(name).main(save_dir=save_dir, show=show)
-        print()
-
-
-if __name__ == '__main__':
-    main(**parse_args(__doc__))
+plt.show()

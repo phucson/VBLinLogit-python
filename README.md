@@ -1,140 +1,106 @@
-# VBLinLogit (Python)
+# VBLinLogit
 
-A Python/NumPy port of [VBLinLogit](https://github.com/DrugowitschLab/VBLinLogit)
-by Jan Drugowitsch: variational Bayesian linear and logistic regression. Unlike
-standard linear and logistic regression, it puts priors on the parameters and
-tunes them by variational Bayesian inference, which helps avoid overfitting. It
-also supports a fully Bayesian version of automatic relevance determination
-(ARD), a sparsity-promoting prior that prunes regression coefficients it deems
-irrelevant.
+This library provides Python code, transcribed from the [MATLAB/Octave original](https://github.com/DrugowitschLab/VBLinLogit) by Jan Drugowitsch, to perform variational Bayesian linear and logistic regression. In contrast to standard linear and logistic regression, the library assumes priors over the parameters which are tuned by variational Bayesian inference, to avoid overfitting. Specifically, it supports a fully Bayesian version of automatic relevance determination (ARD), which is a sparsity-promoting prior that prunes regression coefficients that are deemed irrelevant.
 
-The derivations are in *Variational Bayesian inference for linear and logistic
-regression*, [arXiv:1310.5438](http://arxiv.org/abs/1310.5438) [stat.ML].
+Linear regression is available in the following two variants:
 
-The port follows the original MATLAB code line by line. Its outputs match the
-original (run under GNU Octave) to within floating-point rounding, about 1e-11
-relative error (see [Verification](#verification-against-the-original-matlab-code)).
+*   Variational Bayesian linear regression with ARD: assumes a zero-mean multivariate Gaussian prior on the weight vector, for which each element along the diagonal of the covariance matrix is modeled separately by an inverse-Gamma hyper-prior.
+    
+*   Variational Bayesian linear regression without ARD.
+
+Logistic regression is available in the following two variants:
+
+*   Variational Bayesian logistic regression with ARD: assumes a zero-mean multivariate Gaussian prior on the weight vector, for which each element along the diagonal of the covariance matrix is modeled separately by an inverse-Gamma hyper-prior.
+
+*   Variational Bayesian logistic regression without ARD: assumes the same model as for the ARD variant, only that all elements of the diagonal covariance are modeled jointly by the same inverse-Gamma hyper-prior.
+
+The code is licensed under the New BSD License.
 
 ## Installation
 
-Requires Python ≥ 3.9 with NumPy and SciPy. The examples also need Matplotlib.
-
-```bash
-pip install -e .                 # library only
-pip install -e ".[examples]"     # + matplotlib for the example scripts
-pip install -e ".[test]"         # + pytest
+Clone the repository. To use the functions from Python, add the `src` folder to the module search path, for example by calling
+```python
+>>> import sys
+>>> sys.path.insert(0, '/path/to/VBLinLogit-python/src')
+>>> from vb_linear_fit import vb_linear_fit
 ```
+or by setting the `PYTHONPATH` environment variable to that folder.
 
-## Usage
+The installation can be checked by running the tests in the [`test`](test) folder.
+
+## Requirements
+
+Python 3 with [NumPy](https://numpy.org) and [SciPy](https://scipy.org). The example scripts additionally require [Matplotlib](https://matplotlib.org).
+
+The MATLAB versions of some linear regression example scripts use the MATLAB Statistics and Machine Learning Toolbox to estimate the regression coefficient confidence intervals if it is installed. The Python versions follow the alternative branch of these scripts, and so don't plot these confidence intervals.
+
+## Usage and documentation
+
+The library source code resides in the [`src`](src) folder. The below provides a brief description of the API for the different functions. The header of each function file provides a more extended description of the function it performs. For a more extended discussion of the derivations and the use, please consult *Variational Bayesian
+inference for linear and logistic regression*, [arxiv:1310.5438](http://arxiv.org/abs/1310.5438) [stat.ML].
+
+See the [`examples`](examples) folder for example use of the different scripts in the `src` folder.
+
+In all of the below, `D` is the dimensionality of the input, the output is one-dimensional, and `N` is the number of data points in the training set. For both linear and logistic regression, the training set is specified by the `N x D` NumPy array `X`, and the `N`-element one-dimensional NumPy array `y`. Vectors returned by the functions are likewise one-dimensional NumPy arrays. The `n`th row in `X` specifies one `D`-element input vector that corresponds to the output given by the `n`th element of `y`. For linear regression, these outputs are expected to be scalars. For logistic regression, they are `-1` or `1`.
+
+### Variational Bayesian linear regression
+
+#### Model fitting
 
 ```python
-import numpy as np
-from vblinlogit import vb_linear_fit_ard, vb_linear_pred, vb_logit_fit, vb_logit_pred
+w, V, invV, logdetV, an, bn, E_a, L = vb_linear_fit(X, y)
+w, V, invV, logdetV, an, bn, E_a, L = vb_linear_fit(X, y, a0, b0, c0, d0)
+```
+fits variational Bayesian linear regression without ARD to the training data given by `X` and `y`. The optional scalars `a0`, `b0`, `c0`, and `d0` specify the prior and hyper-prior parameters. The function returns the posterior weight mean vector `w` and covariance matrix `V`, as well as its inverse `invV` and scalar log-determinant `logdetV`. It furthermore returns the scalar posterior precision parameters, `an` and `bn`, the hyper-posterior mean `E_a`, as well as the variational bound `L`.
 
-# linear regression with ARD
+```python
 w, V, invV, logdetV, an, bn, E_a, L = vb_linear_fit_ard(X, y)
-mu, lam, nu = vb_linear_pred(X_new, w, V, an, bn)   # Student's t predictive
+w, V, invV, logdetV, an, bn, E_a, L = vb_linear_fit_ard(X, y, a0, b0, c0, d0)
+```
+is similar to `vb_linear_fit(.)`, but uses an ARD prior. Thus, it returns the hyper-posterior mean vector, `E_a`, rather than a scalar.
 
-# logistic regression, y in {-1, 1}
+#### Model predictions
+
+```python
+mu, lambda_, nu = vb_linear_pred(X, w, V, an, bn)
+```
+for a fitted variational Bayesian linear regression model, predicts the outputs for the given `K x D` input matrix `X`, with one input vector per row. The additional arguments `w`, `V`, `an`, and `bn` are those returned by `vb_linear_fit[_ard]`. The function returns the posterior predictive means `mu`, precisions `lambda_` (`lambda` is a reserved word in Python), and degrees of freedom `nu`. `mu` and `lambda_` are `K`-element vectors, and `nu` is a scalar that is shared by all outputs.
+
+### Variational Bayesian logistic regression
+
+#### Model fitting
+
+```python
 w, V, invV, logdetV, E_a, L = vb_logit_fit(X, y)
-p_y1 = vb_logit_pred(X_new, w, V, invV)             # p(y = 1 | x)
+w, V, invV, logdetV, E_a, L = vb_logit_fit(X, y, a0, b0)
 ```
+fits variational Bayesian logistic regression without ARD, but a global shrinkage prior, to the training data given by `X` and `y`. The optional scalars `a0` and `b0` specify the parameters of the shrinkage prior. The function returns the posterior weight mean vector `w` and covariance matrix `V`, as well as its inverse `invV` and scalar log-determinant `logdetV`. It furthermore returns the scalar posterior shrinkage mean, `E_a`, as well as the variational bound `L`.
 
-`X` is an `N x D` array with one input per row. `y` is a length-`N` vector
-(a 1-D array or an `N x 1` column both work). Vectors come back as 1-D arrays
-and scalars as Python floats.
-
-| MATLAB | Python | Returns |
-|---|---|---|
-| `vb_linear_fit(X, y, a0, b0, c0, d0)` | `vb_linear_fit(X, y, a0=1e-2, b0=1e-4, c0=1e-2, d0=1e-4)` | `w, V, invV, logdetV, an, bn, E_a, L` |
-| `vb_linear_fit_ard(X, y, a0, b0, c0, d0)` | `vb_linear_fit_ard(...)` (same defaults) | `w, V, invV, logdetV, an, bn, E_a, L` (`E_a` is a vector) |
-| `vb_linear_pred(X, w, V, an, bn)` | `vb_linear_pred(X, w, V, an, bn)` | `mu, lam, nu` |
-| `vb_logit_fit(X, y, a0, b0)` | `vb_logit_fit(X, y, a0=1e-2, b0=1e-4)` | `w, V, invV, logdetV, E_a, L` |
-| `vb_logit_fit_ard(X, y, a0, b0)` | `vb_logit_fit_ard(...)` (same defaults) | `w, V, invV, logdetV, E_a, L` (`E_a` is a vector) |
-| `vb_logit_fit_iter(X, y)` | `vb_logit_fit_iter(X, y)` | `w, V, invV, logdetV` |
-| `vb_logit_pred(X, w, V, invV)` | `vb_logit_pred(X, w, V, invV)` | `p(y=1 \| x)` per row |
-| `vb_logit_pred_incr(X, w, V, invV)` | `vb_logit_pred_incr(X, w, V, invV)` | `p(y=1 \| x)` per row |
-| `logdet(A)` | `logdet(A)` | `log(det(A))` via Cholesky |
-
-Each function's docstring describes the full generative model.
-
-MATLAB's `warning('Bayes:maxIter', ...)` becomes a
-`vblinlogit.MaxIterWarning`, which you can silence with
-`warnings.simplefilter('ignore', MaxIterWarning)`. MATLAB's `error(...)`
-becomes a `RuntimeError`.
-
-## Examples
-
-The [`examples`](examples) folder contains Python versions of all eight MATLAB
-example scripts:
-
-```bash
-python examples/vb_examples.py                          # run all, show figures
-python examples/vb_examples.py --no-show --save-dir figs  # headless, save PNGs
-python examples/vb_linear_example_sparse.py             # run one example
+```python
+w, V, invV, logdetV = vb_logit_fit_iter(X, y)
 ```
+is similar to `vb_logit_fit(.)`, but uses only a weak pre-specified shrinkage prior. Thus, it does not support specifying `a0` and `b0`, and doesn't return `E_a`. Furthermore, iterates over the inputs separately rather than processing them all at once, and is therefore slower, but also computationally more stable as it avoids computing the inverse of possibly close-to-singular matrices.
 
-* `vb_linear_example`: VB linear regression, with and without ARD, against least squares on data with uninformative input dimensions.
-* `vb_linear_example_highdim`: Bayesian shrinkage on high-dimensional data with few training examples.
-* `vb_linear_example_sparse`: ARD detects and ignores irrelevant input dimensions.
-* `vb_linear_example_modelsel`: model selection (polynomial order) using the variational bound.
-* `vb_logit_example`: VB logistic regression, with and without ARD, against Fisher LDA.
-* `vb_logit_example_coeff`: recovering coefficients and the separating hyperplane.
-* `vb_logit_example_highdim`: ARD for high-dimensional logistic regression.
-* `vb_logit_example_modelsel`: model selection for logistic regression using the variational bound.
-
-## Tests
-
-```bash
-pytest                 # all tests (~40 s)
-pytest -m "not slow"   # skip the two high-dimensional example runs
+```python
+w, V, invV, logdetV, E_a, L = vb_logit_fit_ard(X, y)
+w, V, invV, logdetV, E_a, L = vb_logit_fit_ard(X, y, a0, b0)
 ```
+is similar to `vb_logit_fit(.)`, but uses an ARD prior. Thus, it returns the posterior shrinkage mean vector, `E_a`, rather than a scalar.
 
-* `tests/test_linear.py`, `tests/test_logit.py`: ports of the MATLAB unit tests in `test/` (return sizes, consistency, optional arguments, weight recovery, prediction accuracy). They add checks that `vb_logit_pred` and `vb_logit_pred_incr` agree, and that `lam` handles ξ = 0.
-* `tests/test_octave_parity.py`: compares every function's outputs with reference outputs of the original MATLAB code.
-* `tests/test_examples.py`: runs every example script headless.
+#### Model predictions
 
-## Verification against the original MATLAB code
+Please note that the two logistic regression prediction functions return the probabilities `p(y=1 | x, ...)` rather than the most likely `y`'s for the given inputs. How to turn these probabilities into predicted `y` depends on the loss function. For a standard `0-1` loss, the rational choice would be to predict `y=1` if `p(y=1 | x, ...) > 0.5`, and `y=-1` otherwise.
 
-[`reference/matlab/src`](reference/matlab/src) holds an unmodified copy of the
-original MATLAB sources. [`tools/generate_octave_reference.py`](tools/generate_octave_reference.py)
-runs them under GNU Octave on fixed datasets: linear and logistic, low and
-higher dimensional, with default and custom priors. It stores inputs and
-outputs in `tests/data/octave_reference.npz`. `tests/test_octave_parity.py`
-then checks that the Python port reproduces every returned quantity (`w`, `V`,
-`invV`, `logdetV`, `an`, `bn`, `E_a`, `L`, and the predictions) with
-`rtol=1e-8`. The largest relative difference observed is about 1e-11.
-
-To regenerate the reference data (needs Octave, for example
-`conda install -c conda-forge octave`):
-
-```bash
-python tools/generate_octave_reference.py --octave /path/to/octave-cli
+```python
+out = vb_logit_pred(X, w, V, invV)
 ```
+for a fitted variational Bayesian logistic regression model, predicts `p(y=1 | x)` for the given `K x D` input matrix `X`, with one input vector `x` per row. The additional arguments `w`, `V`, `invV`, are those returned by `vb_linear_fit[_*]`. The returned `K`-element vector contains the posterior predictive probabilities `p(y=1 | x)`, one element for each row in `X`.
 
-## Differences from the MATLAB version
+```python
+out = vb_logit_pred_incr(X, w, V, invV)
+```
+is similar to `vb_logit_pred`, but rather than computing all predictions simultaneously, it does so for each row of `X` separately by iterating over the rows of `X`.
 
-* **Random numbers.** The examples use NumPy's `default_rng`, so the generated
-  datasets, and therefore the printed numbers and figures, differ from the
-  MATLAB/Octave runs and the arXiv figures. Given the same data, the results
-  are identical. For example, `vb_logit_example_modelsel` run on Octave's
-  dataset reproduces Octave's variational bounds, losses and selected order.
-  The seed of `vb_logit_example_modelsel` was changed to one where the example
-  shows its intended behaviour.
-* **Least squares.** MATLAB's `regress` (Statistics Toolbox), used in the
-  examples for confidence intervals, is replaced by an equivalent OLS
-  computation (`examples/_helpers.py:ols`). For under-determined systems
-  (`N < D`, as in `vb_linear_example_sparse`), `X \ y` in MATLAB returns a
-  sparse "basic" solution. NumPy's `lstsq` returns the minimum-norm solution
-  instead, so the ML baseline differs there.
-* **Output label.** `vb_logit_example_modelsel` printed "MSE" for what is a
-  0-1 loss. The Python version labels it as 0-1 loss.
+## Original MATLAB code
 
-## License and credit
-
-New BSD License; see [LICENSE](LICENSE). The original MATLAB library and the
-underlying algorithms are © 2013-2019 Jan Drugowitsch. If you use this code in
-research, please cite the original paper:
-
-> J. Drugowitsch, *Variational Bayesian inference for linear and logistic
-> regression*, arXiv:1310.5438 [stat.ML], 2013.
+This is a transcription of the MATLAB/Octave library [VBLinLogit](https://github.com/DrugowitschLab/VBLinLogit) by Jan Drugowitsch. Each `.py` file corresponds to the `.m` file of the same name.
